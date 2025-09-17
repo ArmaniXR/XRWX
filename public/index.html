@@ -1,0 +1,1857 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>XRWX 1.1 - The WebXR Weather Display</title>
+    <!-- Edited by Armani Cassel, NWS Shreveport. Development process accelerated by generative processes. 10/26,31-11/8/2024 -->
+    <!-- A-Frame Library -->
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <!-- A-Frame Look-At Component -->
+    <script src="https://unpkg.com/aframe-look-at-component@0.8.0/dist/aframe-look-at-component.min.js"></script>
+    <style>
+        /* Existing CSS Styles */
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        #webcam {
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            min-width: 100vw;
+            min-height: 100vh;
+            object-fit: cover;
+        }
+        a-scene {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 2;
+            background-color: transparent;
+        }
+        #compassDisplay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            display: flex;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 3;
+            pointer-events: none;
+        }
+        #windRadarCanvas {
+            margin-left: 10px;
+            width: 80px;
+            height: 80px;
+            background-color: rgba(0,0,0,0.6);
+            border-radius: 50%;
+        }
+        #compassText {
+            flex: 1;
+            color: #00FF00;
+            font-family: Arial, sans-serif;
+            font-size: 1.5em;
+            text-align: center;
+        }
+        #compassText p {
+            margin: 5px 0;
+        }
+        #hud {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100vw;
+            color: #00FF00;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            z-index: 3;
+            pointer-events: none;
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+        #hud p {
+            margin: 5px 0;
+            white-space: pre-wrap; /* Allow line breaks */
+        }
+        .hud-section {
+            margin: 8px 0;
+        }
+        /* Button Sizes */
+        #updateButton, #unitToggleButton, #measureDistanceButton {
+            background-color: #006400;
+            color: #FFFFFF;
+            border: none;
+            padding: 5px 10px; /* Reduced padding */
+            margin-top: 5px;   /* Reduced margin */
+            font-size: 0.8em;  /* Reduced font size */
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        #updateButton:hover, #unitToggleButton:hover, #measureDistanceButton:hover {
+            background-color: #228B22;
+        }
+        #elevationCanvas {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 50px;
+            /* Height will be adjusted dynamically */
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 4;
+            pointer-events: none;
+        }
+        #weatherText {
+            font-size: 1em;
+        }
+        #timestampText {
+            font-size: 0.9em;
+            color: #ADFF2F;
+        }
+
+        /* Styles for Info and Close Buttons */
+        .info-button, .close-button {
+            position: absolute;
+            top: 10px;
+            left: 10px; /* Both buttons on the left */
+            background-color: #006400;
+            color: #FFFFFF;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            font-size: 24px;
+            text-align: center;
+            line-height: 40px;
+            cursor: pointer;
+            pointer-events: auto;
+            z-index: 5;
+        }
+        .close-button {
+            /* Additional styling if needed */
+            margin-top: 0; /* Adjust if overlapping with info-button */
+        }
+
+        /* Description Overlay */
+        #descriptionOverlay {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 80vw;
+            max-width: 600px; /* Tighter wrapping */
+            margin: 0 auto; /* Center the overlay */
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #00FF00;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 15px;
+            z-index: 4;
+            display: none;
+            pointer-events: auto;
+        }
+        #descriptionOverlay p {
+            margin: 15px 0;
+            font-size: 0.9em; /* Smaller text */
+            white-space: pre-wrap; /* Ensure text wraps */
+        }
+
+        /* Raw Data Container Styles */
+        #rawDataContainer {
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #00FF00;
+            font-family: monospace;
+            padding: 10px;
+            margin-top: 10px;
+            max-height: 200px; /* Adjust as needed */
+            overflow-y: auto;
+            white-space: pre-wrap; /* Wrap long lines */
+        }
+
+        /* Button Styles for Overlay */
+        .overlay-button {
+            background-color: #006400;
+            color: #FFFFFF;
+            border: none;
+            padding: 5px 10px;
+            margin-top: 5px;
+            font-size: 0.8em;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        .overlay-button:hover {
+            background-color: #228B22;
+        }
+
+        /* New Red Button for Send Feedback */
+        .feedback-button {
+            background-color: red;
+            color: #FFFFFF;
+            border: none;
+            padding: 5px 10px;
+            margin-top: 5px;
+            font-size: 0.8em;
+            cursor: pointer;
+            pointer-events: auto;
+        }
+        .feedback-button:hover {
+            background-color: darkred;
+        }
+
+        /* Responsive Text Scaling for vrHUD */
+        @media (max-width: 500px) {
+            #vrHUD a-text {
+                width: 2; /* Increase width for better wrapping */
+                font-size: 0.6em; /* Reduce font size on smaller screens */
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Webcam Video -->
+    <video id="webcam" autoplay playsinline></video>
+
+    <!-- A-Frame Scene -->
+    <a-scene
+        vr-mode-ui="enabled: true"
+        embedded
+        renderer="colorManagement: true; alpha: true; transparent: true;">
+        <!-- NWS Assets -->
+        <a-assets>
+            <a-asset-item id="NWSModel" src="https://cdn.glitch.global/9bfd8c0d-8871-4a9f-a828-b00a389326d6/NWS3DLogo7.glb?v=1731121083750"></a-asset-item>
+        </a-assets>
+        <a-entity gltf-model="#NWSModel" scale="0.2 0.2 0.2" position="0 0 -0.5"></a-entity>
+
+        <!-- Ground Plane -->
+        <a-plane color="#228B22" height="500" width="500" position="0 -0.01 0" rotation="-90 0 0" opacity="0.75"></a-plane>
+
+        <!-- Cloud Base Cylinders -->
+        <!-- Fixed Yellow Cylinder: 1 Mile Radius -->
+        <a-cylinder id="wireframeCylinder" radius="1609.34" height="1000" color="yellow" wireframe="true" position="0 500 0" visible="true"></a-cylinder>
+        <!-- Smaller Cylinder: Represents Measured Distance -->
+        <a-cylinder id="wireframeCylinder2" radius="10" height="1000" color="white" wireframe="true" position="0 500 0" visible="false"></a-cylinder>
+
+        <!-- Container for Clouds (Initially Hidden) -->
+        <a-entity id="cloudsContainer" visible="false"></a-entity> <!-- **Set visible to false by default** -->
+
+        <!-- Blue Sky (Always Visible in VR) -->
+        <a-sky id="vrSky" color="#87CEEB" visible="false"
+               geometry="primitive: sphere; radius: 100000; phiLength: 360; phiStart: 0; thetaLength: 180; thetaStart: 0;"
+               material="side: back;"></a-sky> <!-- Adjusted geometry and material -->
+
+        <!-- VR HUD Entity (Grabbable and Initially Hidden) -->
+        <a-entity id="vrHUD" grabbable position="0 1.6 -2" look-at="[camera]" visible="false">
+            <a-plane color="#000000" opacity="0.5" width="2" height="1.5" shadow>
+                <!-- VR HUD Text Elements -->
+                <a-text id="vrStationText" value="Station: Loading..." color="#00FF00" align="left" width="1.8" position="-0.8 0.5 0.01" font-size="0.3"></a-text>
+                <a-text id="vrWeatherText" value="Weather: Loading..." color="#00FF00" align="left" width="1.8" position="-0.8 0.2 0.01" font-size="0.3"></a-text>
+                <a-text id="vrTimestampText" value="Observation Time: Loading..." color="#ADFF2F" align="left" width="1.8" position="-0.8 -0.1 0.01" font-size="0.3"></a-text>
+                <a-text id="vrCloudText" value="Cloud Cover: Loading..." color="#00FF00" align="left" width="1.8" position="-0.8 -0.4 0.01" font-size="0.3"></a-text>
+            </a-plane>
+        </a-entity>
+
+        <!-- Camera with Interaction Components -->
+        <a-camera id="camera" position="0 1.6 0" look-controls wasd-controls="enabled: true" far="10000000">
+            <a-cursor 
+                id="cursor"
+                fuse="false"
+                raycaster="objects: .clickable"
+                material="color: #FFFFFF; shader: flat;">
+            </a-cursor>
+        </a-camera>
+
+        <!-- VR Controllers with A-Frame Interaction Components -->
+        <a-entity id="leftHand" hand-controls="left" grab></a-entity>
+        <a-entity id="rightHand" hand-controls="right" grab></a-entity>
+      
+        <!-- VR Hand Tracking with A-Frame Interaction -->      
+        <a-entity hand-tracking-controls="hand: left"></a-entity>
+        <a-entity hand-tracking-controls="hand: right"></a-entity>
+    </a-scene>
+
+    <!-- Canvas for Elevation Data -->
+    <canvas id="elevationCanvas"></canvas>
+
+    <!-- Compass Display at the Top -->
+    <div id="compassDisplay">
+        <canvas id="windRadarCanvas" width="80" height="80"></canvas>
+        <div id="compassText">
+            <p id="compassHeadingText">Heading: --°</p>
+            <p id="compassDirectionText">Direction: --</p>
+        </div>
+    </div>
+
+    <!-- Description Overlay -->
+    <div id="descriptionOverlay">
+        <button class="close-button" onclick="hideDescription()">×</button>
+        <p id="descriptionText">
+Welcome to XRWX 1.1 (The WebXR Weather Display). Please ensure you have all location/camera/orientation permissions enabled for the best experience.
+
+Hold your device to the sky! This display features a wireframe cylinder on a green horizon that shows the height of any observed cloud within 1 mile at its edge. By aiming at the cloud of question you can use the "Freeze Measurement" button to hold the estimated distance to a cloud based on your device's orientation.
+
+This application uses the device's GPS and compass data to display weather information and cloud cover. You can toggle between metric/imperial units, and view raw METAR data by clicking the "Show Raw Data" button below.
+
+Armani Cassel, NWS Shreveport, 11/2024
+        </p>
+        <!-- New Buttons -->
+        <button id="toggleDataButton" class="overlay-button" onclick="toggleRawData()">Show Raw Data</button>
+        <button id="toggleCloudsButton" class="overlay-button" onclick="toggleClouds()">Show Clouds</button>
+        <!-- New Send Feedback Button -->
+        <button id="sendFeedbackButton" class="feedback-button" onclick="sendFeedback()">Send Feedback</button>
+        <!-- Raw Data Container -->
+        <div id="rawDataContainer" style="display: none;">
+            <pre id="rawDataContent"></pre>
+        </div>
+    </div>
+
+    <!-- HUD (Bottom Info Display) -->
+    <div id="hud">
+        <!-- Info Button -->
+        <button class="info-button" onclick="showDescription()">i</button>
+
+        <p id="gpsText">Loading GPS...</p>
+        <p id="elevationText">Loading Elevation...</p>
+        <div class="hud-section" id="stationSection">
+            <p><strong>Station:</strong> <span id="stationText">Loading Station...</span></p>
+        </div>
+        <div class="hud-section" id="weatherSection">
+            <p><strong>Weather:</strong> <span id="weatherText">Loading Weather...</span></p>
+            <p id="timestampText">Loading Timestamp...</p>
+        </div>
+        <div class="hud-section" id="cloudSection">
+            <p><strong>Cloud Cover:</strong></p>
+            <p id="cloudText">Loading Cloud Cover...</p>
+        </div>
+        <!-- Added Cloud Distance Text -->
+        <p id="cloudDistanceText">Distance to Cloud: --</p>
+        <!-- Adjusted Buttons -->
+        <button id="measureDistanceButton" onclick="toggleDistanceMeasurement()">Freeze Measurement</button>
+        <button id="updateButton" onclick="updateData()">Update</button>
+        <button id="unitToggleButton" onclick="toggleUnits()">Switch to Imperial Units</button>
+    </div>
+
+    <!-- JavaScript to Handle Data and HUD Synchronization -->
+    <script>
+        // DOM Elements
+        const gpsTextEl = document.getElementById('gpsText');
+        const elevationTextEl = document.getElementById('elevationText');
+        const stationTextEl = document.getElementById('stationText');
+        const weatherTextEl = document.getElementById('weatherText');
+        const timestampTextEl = document.getElementById('timestampText');
+        const cloudTextEl = document.getElementById('cloudText');
+        const cloudDistanceTextEl = document.getElementById('cloudDistanceText');
+        const unitToggleButton = document.getElementById('unitToggleButton');
+
+        // Compass Display Elements
+        const compassHeadingTextEl = document.getElementById('compassHeadingText');
+        const compassDirectionTextEl = document.getElementById('compassDirectionText');
+
+        // VR HUD Text Elements
+        const vrWeatherTextEl = document.getElementById('vrWeatherText');
+        const vrGpsTextEl = document.getElementById('vrGpsText');
+        const vrTimestampTextEl = document.getElementById('vrTimestampText');
+        const vrStationTextEl = document.getElementById('vrStationText');
+        const vrCloudTextEl = document.getElementById('vrCloudText'); // Newly added
+        const vrCloudDistanceTextEl = document.getElementById('vrCloudDistanceText'); // Newly added
+
+        // VR Sky Element
+        const vrSky = document.getElementById('vrSky');
+
+        // Elevation Canvas
+        const elevationCanvas = document.getElementById('elevationCanvas');
+        const elevationCtx = elevationCanvas.getContext('2d');
+
+        // Units and Weather Data Variables
+        let currentUnits = 'metric';
+        let cloudBaseHeight = 1000; // Default height in meters
+        let lastWeatherProperties = null;
+        let windDirValue = null;
+        let windSpeedKnots = null;
+        let unitToggleTimeout = null; // To manage the countdown
+
+        // Raw Data Variables
+        let rawMetarData = '';
+        let rawJsonData = '';
+
+        // References to A-Frame Entities
+        const vrHUD = document.getElementById('vrHUD');
+        const sceneEl = document.querySelector('a-scene');
+
+        // Measurement Control Flags
+        let isMeasurementFrozen = false; // Flag to freeze/unfreeze measurement
+        let horizontalDistance = null; // Store horizontal distance in meters
+
+        // Store Original Position of wireframeCylinder2
+        let cylinder2OriginalPosition = null;
+
+        // VR Mode Tracking
+        let isVRMode = false;
+
+        // Variables to hold XRSession and event listener reference
+        let xrSession = null;
+        let inputSourcesChangeListener = null;
+
+        // Adjust Elevation Canvas Sizes
+        function adjustCanvasSizes() {
+            elevationCanvas.width = 50;
+            elevationCanvas.height = window.innerHeight * 0.4; // 40% of viewport height
+            elevationCanvas.style.height = elevationCanvas.height + 'px';
+        }
+        adjustCanvasSizes();
+        window.addEventListener('resize', adjustCanvasSizes);
+
+        // Camera Initialization
+        function cameraStart() {
+            const cameraView = document.getElementById("webcam");
+            navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: "environment" } })
+                .then(stream => { cameraView.srcObject = stream; })
+                .catch(error => { console.error("Camera error:", error); });
+        }
+
+        // Show Description Overlay
+        function showDescription() {
+            document.getElementById('hud').style.display = 'none';
+            document.getElementById('descriptionOverlay').style.display = 'block';
+        }
+
+        // Hide Description Overlay
+        function hideDescription() {
+            document.getElementById('descriptionOverlay').style.display = 'none';
+            document.getElementById('hud').style.display = 'block';
+        }
+
+        // Toggle Raw Data Display
+        function toggleRawData() {
+            const rawDataContainer = document.getElementById('rawDataContainer');
+            const rawDataContent = document.getElementById('rawDataContent');
+            const toggleDataButton = document.getElementById('toggleDataButton');
+
+            if (rawDataContainer.style.display === 'none') {
+                // Show raw data
+                rawDataContainer.style.display = 'block';
+                toggleDataButton.textContent = 'Hide Raw Data';
+
+                // Update raw data content
+                rawDataContent.textContent = `Raw METAR Data:\n${rawMetarData}\n\nJSON Data:\n${rawJsonData}`;
+            } else {
+                // Hide raw data
+                rawDataContainer.style.display = 'none';
+                toggleDataButton.textContent = 'Show Raw Data';
+            }
+        }
+
+        // Toggle Clouds Display
+        function toggleClouds() {
+            const cloudsContainer = document.getElementById('cloudsContainer');
+            const toggleCloudsButton = document.getElementById('toggleCloudsButton');
+
+            if (!cloudsContainer) {
+                console.error("cloudsContainer element not found.");
+                return;
+            }
+
+        // Correctly get the boolean value of 'visible'
+        const isVisible = cloudsContainer.getAttribute('visible');
+
+            // Toggle visibility
+            const newVisibility = !isVisible;
+            cloudsContainer.setAttribute('visible', newVisibility);
+
+            // Update HTML Toggle Button Text
+            if (toggleCloudsButton) {
+            toggleCloudsButton.textContent = newVisibility ? 'Hide Clouds' : 'Show Clouds';
+            }
+
+            console.log(`Clouds visibility set to: ${newVisibility}`);
+        }
+
+        // Function to send feedback
+        function sendFeedback() {
+            // Survey URL:
+            const surveyURL = 'https://forms.gle/KLKyTmUQWibkPt5Z7';
+            window.open(surveyURL, '_blank');
+        }
+
+        // Get Cardinal Direction from Angle
+        function getCardinalDirection(angle) {
+            const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+            const index = Math.floor(((angle + 22.5) % 360) / 45);
+            return directions[index];
+        }
+
+        // Handle Device Orientation for Compass and Elevation
+        let heading = 0;
+        let elevationAngle = 0;
+
+        function handleOrientation(event) {
+            if (event.webkitCompassHeading !== undefined && event.webkitCompassAccuracy >= 0) {
+                // iOS Devices
+                heading = event.webkitCompassHeading;
+            } else if (event.absolute === true || event.absolute === undefined) {
+                // Android Devices
+                if (event.alpha !== null) {
+                    heading = calculateCompassHeading(event.alpha, event.beta, event.gamma);
+                }
+            } else {
+                heading = 0;
+            }
+
+            heading = (heading + 360) % 360;
+            const direction = getCardinalDirection(heading);
+            compassHeadingTextEl.textContent = `Heading: ${heading.toFixed(0)}°`;
+            compassDirectionTextEl.textContent = `Direction: ${direction}`;
+
+            const beta = event.beta;
+            elevationAngle = Math.abs(90 - Math.abs(beta));
+            elevationTextEl.textContent = `Elevation Angle: ${elevationAngle.toFixed(1)}°`;
+
+            drawElevation(elevationAngle);
+            drawWindRadar(windDirValue, windSpeedKnots, heading);
+
+            // Live distance calculation unless measurement is frozen
+            if (!isMeasurementFrozen) {
+                calculateAndDisplayDistance();
+            }
+        }
+
+        // Calculate Compass Heading on Android Devices
+        function calculateCompassHeading(alpha, beta, gamma) {
+            const alphaRad = alpha * (Math.PI / 180);
+            const betaRad = beta * (Math.PI / 180);
+            const gammaRad = gamma * (Math.PI / 180);
+
+            const cA = Math.cos(alphaRad);
+            const sA = Math.sin(alphaRad);
+            const sB = Math.sin(betaRad);
+            const cB = Math.cos(betaRad);
+            const sG = Math.sin(gammaRad);
+            const cG = Math.cos(gammaRad);
+
+            const x = -cA * sG - sA * sB * cG;
+            const y = -sA * sG + cA * sB * cG;
+            let compassHeading = Math.atan2(x, y);
+
+            if (compassHeading < 0) {
+                compassHeading += 2 * Math.PI;
+            }
+
+            compassHeading = compassHeading * (180 / Math.PI);
+            return compassHeading;
+        }
+
+        // Initialize Device Orientation Events
+        function initDeviceOrientation() {
+            if (typeof DeviceOrientationEvent.requestPermission !== 'function') {
+                window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+                window.addEventListener('deviceorientation', handleOrientation, true);
+            }
+            // iOS devices will request permission via Update button (handled below)
+        }
+
+        // Toggle Units Function
+        function toggleUnits() {
+            currentUnits = currentUnits === 'metric' ? 'imperial' : 'metric';
+            unitToggleButton.textContent = currentUnits === 'metric' ? 'Switch to Imperial Units' : 'Switch to Metric Units';
+            console.log(`Units toggled to ${currentUnits}`);
+            if (lastWeatherProperties) {
+                displayWeatherData(lastWeatherProperties);
+            } else {
+                console.warn("No weather data available to toggle units.");
+            }
+
+            // Update the displayed distance
+            if (horizontalDistance !== null) {
+                updateDistanceDisplay();
+            }
+        }
+
+        // Update Data Function with 5-second Timeout for Geolocation and 1-second Countdown for Unit Toggle
+        function updateData() {
+            clearCookies();
+
+            // Request compass permission on iOS
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(function(response) {
+                        if (response === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation, true);
+                        } else {
+                            compassHeadingTextEl.textContent = "Compass permission denied.";
+                            compassDirectionTextEl.textContent = "";
+                            if (vrWeatherTextEl) {
+                            vrWeatherTextEl.setAttribute('value', "Compass permission denied.");
+                            }
+                            if (vrGpsTextEl) {
+                            vrGpsTextEl.setAttribute('value', "Compass permission denied.");
+                            }
+                        }
+                    })
+                    .catch(function(error) {
+                        console.error('DeviceOrientation requestPermission error:', error);
+                        compassHeadingTextEl.textContent = "Compass not supported.";
+                        compassDirectionTextEl.textContent = "";
+                        if (vrWeatherTextEl) {
+                        vrWeatherTextEl.setAttribute('value', "Compass not supported.");
+                        }
+                        if (vrStationTextEl) {
+                        vrStationTextEl.setAttribute('value', "Compass not supported.");
+                        }
+                    });
+            } else {
+                // Non-iOS devices
+                window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+                window.addEventListener('deviceorientation', handleOrientation, true);
+            }
+
+            // Request Location with 5-second Timeout
+            getLocationWithTimeout(5000);
+        }
+
+        // Clear All Cookies
+        function clearCookies() {
+            const cookies = document.cookie.split(";");
+            for (let cookie of cookies) {
+                const eqPos = cookie.indexOf("=");
+                const name = eqPos > -1 ? cookie.substr(0, eqPos).trim() : cookie.trim();
+                document.cookie = `${name}=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/`;
+            }
+        }
+
+        // Get Location with Automatic Fallback to IP-Based after 5 Seconds
+        function getLocationWithTimeout(timeout) {
+            gpsTextEl.textContent = "Fetching location...";
+            if (vrGpsTextEl) {
+            vrGpsTextEl.setAttribute('value', "Fetching location...");
+            } else {
+                console.warn("vrGpsTextEl is null.");
+            }
+
+            // Wrap geolocation in a Promise
+            const geolocationPromise = new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, {
+                    enableHighAccuracy: true,
+                    timeout: timeout, // Set timeout to 5 seconds
+                    maximumAge: 0
+                });
+            });
+
+            // Create a timeout Promise that rejects after 5 seconds
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => {
+                    reject(new Error("Geolocation timeout"));
+                }, timeout);
+            });
+
+            // Race both Promises
+            Promise.race([geolocationPromise, timeoutPromise])
+                .then(showPosition)
+                .catch(fallbackToIP);
+        }
+
+        // Show Position Data
+        function showPosition(position) {
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            gpsTextEl.textContent = `Lat: ${latitude.toFixed(4)}°, Lon: ${longitude.toFixed(4)}°`;
+            if (vrGpsTextEl) {
+            vrGpsTextEl.setAttribute('value', `Lat: ${latitude.toFixed(4)}°, Lon: ${longitude.toFixed(4)}°`);
+            }
+            getNearestStation(latitude, longitude);
+
+            // Start 1-second countdown to toggle units automatically
+            if (unitToggleTimeout) {
+                clearTimeout(unitToggleTimeout);
+            }
+            unitToggleTimeout = setTimeout(() => {
+                toggleUnits();
+            }, 1000);
+        }
+
+        // Fallback to IP-Based Geolocation
+        function fallbackToIP() {
+            console.warn("Geolocation failed or not supported. Falling back to IP-based location.");
+            fetch('https://ipapi.co/json/')
+                .then(response => response.json())
+                .then(data => {
+                    const latitude = data.latitude;
+                    const longitude = data.longitude;
+                    gpsTextEl.textContent = `Lat: ${latitude.toFixed(4)}°, Lon: ${longitude.toFixed(4)}° (IP-based)`;
+                    if (vrGpsTextEl) {
+                    vrGpsTextEl.setAttribute('value', `Lat: ${latitude.toFixed(4)}°, Lon: ${longitude.toFixed(4)}° (IP-based)`);
+                    }
+                    getNearestStation(latitude, longitude);
+
+                    // Start 1-second countdown to toggle units automatically
+                    if (unitToggleTimeout) {
+                        clearTimeout(unitToggleTimeout);
+                    }
+                    unitToggleTimeout = setTimeout(() => {
+                        toggleUnits();
+                    }, 1000);
+                })
+                .catch(error => {
+                    console.error("IP-based geolocation failed:", error);
+                    gpsTextEl.textContent = "Unable to determine location.";
+                    if (vrGpsTextEl) {
+                    vrGpsTextEl.setAttribute('value', "Unable to determine location.");
+                    }
+                });
+        }
+
+        // Function to calculate distance between two coordinates
+        function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+            var R = 6371; // Radius of earth in km
+            var dLat = deg2rad(lat2 - lat1);
+            var dLon = deg2rad(lon2 - lon1);
+            var a =
+                Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            var d = R * c; // Distance in km
+            return d;
+        }
+
+        function deg2rad(deg) {
+            return deg * (Math.PI / 180);
+        }
+
+    // Modified getNearestStation Function with Sequential METAR Fetching
+    async function getNearestStation(latitude, longitude) {
+        try {
+            const response = await fetch('data/stations.cache.json');
+            const stationsData = await response.json();
+
+                    let stationsArray = stationsData;
+
+                    // Ensure stationsData is an array
+                    if (!Array.isArray(stationsArray)) {
+                        console.error('stationsData is not an array:', stationsData);
+                        throw new Error('Invalid stationsData format: Expected an array');
+                    }
+
+                    if (stationsArray.length === 0) {
+                        throw new Error('No stations available in stationsData');
+                    }
+
+            // Calculate distance for each station and sort them by distance ascending
+            const stationsWithDistance = stationsArray.map(station => {
+                        const stationLat = parseFloat(station.lat);
+                        const stationLon = parseFloat(station.lon);
+
+                        // Ensure stationLat and stationLon are valid numbers
+                        if (!isNaN(stationLat) && !isNaN(stationLon)) {
+                        const distance = getDistanceFromLatLonInKm(latitude, longitude, stationLat, stationLon);
+                    return { ...station, distance };
+                        } else {
+                            console.warn('Invalid station coordinates:', station);
+                    return null;
+                        }
+            }).filter(station => station !== null);
+
+            // Sort stations by distance ascending
+            stationsWithDistance.sort((a, b) => a.distance - b.distance);
+
+            console.log(`Total stations with valid coordinates: ${stationsWithDistance.length}`);
+
+            // Attempt to fetch METAR data sequentially
+            const successful = await fetchMETARSequentially(stationsWithDistance);
+
+            if (!successful) {
+                stationTextEl.textContent = 'No available METAR data found within threshold.';
+                        if (vrStationTextEl) {
+                    vrStationTextEl.setAttribute('value', 'No available METAR data found within threshold.');
+                }
+                weatherTextEl.textContent = 'No METAR data available.';
+                if (vrWeatherTextEl) {
+                    vrWeatherTextEl.setAttribute('value', 'No METAR data available.');
+                        }
+                console.error('No METAR data available from any nearby station.');
+                    }
+
+        } catch (error) {
+                    console.error('Error in getNearestStation:', error);
+                    stationTextEl.textContent = 'Error fetching station data.';
+                    if (vrStationTextEl) {
+                    vrStationTextEl.setAttribute('value', 'Error fetching station data.');
+                    }
+            weatherTextEl.textContent = `Error fetching weather data: ${error.message}`;
+            if (vrWeatherTextEl) {
+                vrWeatherTextEl.setAttribute('value', `Error fetching weather data: ${error.message}`);
+            }
+        }
+    }
+
+    // Asynchronous function to fetch METAR data sequentially from stations
+    async function fetchMETARSequentially(stations) {
+        for (let i = 0; i < stations.length; i++) {
+            const station = stations[i];
+            const stationId = station.icaoId; // Use 'icaoId' from your JSON data
+            const stationName = station.site; // Use 'site' from your JSON data
+            console.log(`Attempting to fetch METAR for station: ${stationName} (${stationId})`);
+
+            try {
+                await getLatestObservation(stationId);
+                // If getLatestObservation doesn't throw, assume success
+                stationTextEl.textContent = `${stationName} (${stationId})`;
+                if (vrStationTextEl) {
+                    vrStationTextEl.setAttribute('value', `${stationName} (${stationId})`);
+                }
+                console.log(`Successfully fetched METAR for station: ${stationName} (${stationId})`);
+                return true; // Exit after successful fetch
+            } catch (error) {
+                console.warn(`Failed to fetch METAR for station: ${stationName} (${stationId}). Reason: ${error.message}`);
+                // Wait for 2 seconds before trying the next station
+                await delay(2000);
+            }
+        }
+        return false; // All attempts failed
+    }
+
+    // Helper function to introduce delays
+    function delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+    // Modified getLatestObservation Function to Throw on Failure
+    async function getLatestObservation(stationId) {
+            console.log(`Fetching METAR data for station ID: ${stationId}`);
+
+            const url = `/api/metar?stationId=${stationId}`;
+
+        try {
+            const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`Server error: ${response.status}`);
+                    }
+            const data = await response.json();
+                    console.log('METAR data received:', data);
+
+                    if (data && data.length > 0) {
+                        displayWeatherData(data[0]); // Use the first item in the array
+                    } else {
+                        throw new Error('No METAR data available.');
+                    }
+        } catch (error) {
+                    console.error('METAR data error:', error);
+                    weatherTextEl.textContent = `Error fetching weather data: ${error.message}`;
+                    if (vrWeatherTextEl) {
+                    vrWeatherTextEl.setAttribute('value', `Error fetching weather data: ${error.message}`);
+                    }
+            // Re-throw the error to be handled by the caller
+            throw error;
+        }
+        }
+
+    // Modified displayWeatherData Function
+        function displayWeatherData(data) {
+            lastWeatherProperties = data;
+
+            // Store raw METAR and JSON data
+            rawMetarData = data.rawOb || 'No raw METAR data available.';
+            rawJsonData = JSON.stringify(data, null, 2); // Pretty print JSON data
+
+            // Extract Weather Conditions
+            let weatherConditions = 'N/A';
+            if (data.wxString !== null && data.wxString !== undefined && data.wxString !== '') {
+                weatherConditions = decodeWeatherCodes(data.wxString);
+            }
+
+            // Extract Temperature
+            let tempValue = 'N/A';
+            let tempUnit = '°C';
+            if (data.temp !== null && data.temp !== undefined) {
+                tempValue = parseFloat(data.temp); // in Celsius
+                if (currentUnits === 'imperial') {
+                    tempValue = tempValue * 9 / 5 + 32; // Convert to Fahrenheit
+                    tempUnit = '°F';
+                }
+                tempValue = tempValue.toFixed(1);
+            }
+
+            // Extract Wind Direction
+            windDirValue = null;
+            let windDirection = 'N/A';
+            if (data.wdir !== null && data.wdir !== undefined) {
+                windDirValue = parseFloat(data.wdir); // raw value in degrees
+                windDirection = getCardinalDirection(windDirValue);
+            }
+
+            // Extract Wind Speed
+            let windSpeedValue = 'N/A';
+            let windSpeedUnit = 'knots';
+            windSpeedKnots = null;
+
+            if (data.wspd !== null && data.wspd !== undefined) {
+                windSpeedKnots = parseFloat(data.wspd); // in knots
+                if (currentUnits === 'imperial') {
+                    windSpeedValue = windSpeedKnots * 1.15078; // Convert knots to mph
+                    windSpeedUnit = 'mph';
+                } else {
+                    windSpeedValue = windSpeedKnots * 0.514444; // Convert knots to m/s
+                    windSpeedUnit = 'm/s';
+                }
+                windSpeedValue = windSpeedValue.toFixed(1);
+            }
+
+            // Construct Weather Text based on conditions
+            let weatherTextParts = [];
+
+            if (weatherConditions !== 'N/A') {
+                weatherTextParts.push(weatherConditions);
+                if (tempValue !== 'N/A') {
+                    weatherTextParts.push(`${tempValue}${tempUnit}`);
+                }
+            } else if (tempValue !== 'N/A') {
+                weatherTextParts.push(`${tempValue}${tempUnit}`);
+            }
+
+            if (windDirection !== 'N/A' && windSpeedValue !== 'N/A') {
+                weatherTextParts.push(`Wind: ${windDirection} at ${windSpeedValue} ${windSpeedUnit}`);
+            }
+
+            let weatherText = weatherTextParts.join(', ');
+
+            // Update Weather Text in DOM HUD
+            weatherTextEl.textContent = weatherText;
+            console.log(`Weather Text Updated: ${weatherText}`);
+
+            // Update Weather Text in VR HUD
+            if (vrWeatherTextEl) {
+            vrWeatherTextEl.setAttribute('value', `Weather: ${weatherText}`);
+            }
+
+            // Extract and Format Observation Time
+            let observationTime = data.reportTime;
+            if (observationTime) {
+                // Parse the date string as a UTC date
+                let date = new Date(observationTime + 'Z'); // Append 'Z' to indicate UTC time
+
+                // Format options
+                let options = {
+                    hour: 'numeric',
+                    minute: 'numeric',
+                    second: 'numeric',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    timeZoneName: 'short',
+                };
+
+                // Format the date in the local time zone
+                let formattedTime = date.toLocaleString(undefined, options);
+
+                timestampTextEl.textContent = `Observation Time: ${formattedTime}`;
+                if (vrTimestampTextEl) {
+                vrTimestampTextEl.setAttribute('value', `Observation Time: ${formattedTime}`);
+                }
+            } else {
+                timestampTextEl.textContent = 'Observation Time: N/A';
+                if (vrTimestampTextEl) {
+                vrTimestampTextEl.setAttribute('value', 'Observation Time: N/A');
+                }
+            }
+
+            // Extract and Display Cloud Cover
+            let cloudInfo = '';
+            cloudBaseHeight = null; // Reset
+
+            if (data.clouds && data.clouds.length > 0) {
+                data.clouds.forEach(layer => {
+                    const cover = layer.cover; // Use 'cover' instead of 'type'
+                    const baseFeet = parseInt(layer.base) || null; // Use 'base' in feet
+                    let baseMeters = null;
+                    if (baseFeet !== null) {
+                        baseMeters = baseFeet * 0.3048; // Convert feet to meters
+
+                        if (cloudBaseHeight === null || baseMeters < cloudBaseHeight) {
+                            cloudBaseHeight = baseMeters;
+                        }
+                    }
+
+                    let baseValue = 'N/A';
+                    let units = '';
+                    if (baseMeters !== null) {
+                        if (currentUnits === 'metric') {
+                            baseValue = baseMeters.toFixed(0);
+                            units = 'm';
+                        } else {
+                            baseValue = baseFeet.toFixed(0);
+                            units = 'ft';
+                        }
+                    }
+
+                    cloudInfo += `${cover}${baseValue !== 'N/A' ? ' at ' + baseValue + ' ' + units : ''}\n`;
+                });
+            } else {
+                cloudInfo = 'Clear';
+                cloudBaseHeight = 10000; // Default to 10,000 meters if sky is clear
+            }
+
+            // Ensure cloudBaseHeight has a valid value
+            if (!cloudBaseHeight) {
+                cloudBaseHeight = 1000; // Fallback to 1000 meters
+            }
+
+            // Update Cloud Cover in DOM HUD
+            cloudTextEl.textContent = cloudInfo.trim();
+            console.log(`Cloud Cover Updated: ${cloudTextEl.textContent}`);
+
+            // Update Cloud Cover in VR HUD
+            if (vrCloudTextEl) {
+            vrCloudTextEl.setAttribute('value', `Cloud Cover: ${cloudInfo.trim()}`);
+            }
+
+            // Determine Overall Cloud Coverage Type
+            let coverageType = 'CLEAR';
+            if (data.clouds && data.clouds.length > 0) {
+                const precedence = ['OVC', 'BKN', 'SCT', 'FEW'];
+                for (let level of precedence) {
+                    if (data.clouds.some(layer => layer.cover.toUpperCase() === level)) {
+                        coverageType = level;
+                        break;
+                    }
+                }
+            }
+
+            console.log(`Coverage Type Determined: ${coverageType}`);
+
+            // Create Clouds Based on Coverage Type
+            createClouds(coverageType);
+
+            // Update the Cylinders in the A-Frame Scene
+            updateCylinders();
+
+            // Draw the Wind Radar
+            drawWindRadar(windDirValue, windSpeedKnots, heading);
+
+            // Update Cloud Distance in VR HUD
+            updateDistanceDisplay(); // Updated to match function name
+        }
+
+        // Enhanced Function to Decode Weather Codes, Handling Combined Symbols
+        function decodeWeatherCodes(codes) {
+            // Define intensity prefixes
+            const intensityMap = {
+                '+': 'Heavy',
+                '-': 'Light'
+                //'': 'Moderate'
+            };
+
+            // Define weather phenomena
+            const phenomenaMap = {
+                'TSRA': 'Thunderstorm with Rain',
+                'RA': 'Rain',
+                'SHRA': 'Rain Showers',
+                'SN': 'Snow',
+                'SHSN': 'Snow Showers',
+                'TS': 'Thunderstorm',
+                'FZFG': 'Freezing Fog',
+                'VCTS': 'Thunderstorms Nearby',
+                'BLDU': 'Blowing Dust',
+                'FZDZ': 'Freezing Drizzle',
+                
+                //'RA': 'Rain',
+                //'-RA': 'Light Rain',
+                //'+RA': 'Heavy Rain',
+                'SHRA': 'Rain Showers',
+                'TSRA': 'Thunderstorm with Rain',
+                'FZRA': 'Freezing Rain',
+                
+                'SN': 'Snow',
+                '-SN': 'Light Snow',
+                '+SN': 'Heavy Snow',
+                'DRSN': 'Drifting Snow',
+                'BLSN': 'Blowing Snow',
+                'SHSN': 'Snow Showers',
+                'TSSN': 'Thunderstorm with Snow',
+                
+                'SG': 'Snow Grains',
+                '-SG': 'Light Snow Grains',
+                '+SG': 'Heavy Snow Grains',
+                
+                'IC': 'Ice Crystals',
+                
+                'PL': 'Ice Pellets',
+                '-PL': 'Light Ice Pellets',
+                '+PL': 'Heavy Ice Pellets',
+                'SHPL': 'Ice Pellet Showers',
+                'TSPL': 'Thunderstorm with Ice Pellets',
+                
+                'GR': 'Hail',
+                'SHGR': 'Hail Showers',
+                'TSGR': 'Thunderstorm with Hail',
+                
+                'GS': 'Small Hail',
+                'SHGS': 'Small Hail Showers',
+                'TSGS': 'Thunderstorm with Small Hail',
+                
+                'UP': 'Unknown Precipitation',
+                
+                //# Thunderstorms
+                //'TS': 'Thunderstorm',
+                
+                //# Vicinity Indicators
+                'VCSH': 'Showers Nearby',
+                'VCTS': 'Thunderstorms Nearby',
+                
+                //# Showers
+                //'SH': 'Showers',
+                'SHRA': 'Rain Showers',
+                'SHSN': 'Snow Showers',
+                'SHPL': 'Ice Pellet Showers',
+                'SHGR': 'Hail Showers',
+                'SHGS': 'Small Hail Showers',
+                
+                //Freezing Conditions
+                'FZDZ': 'Freezing Drizzle',
+                'FZRA': 'Freezing Rain',
+                
+                'FZFG': 'Freezing Fog',
+                
+                //Visibility and Obscurations
+
+                'MIFG': 'Shallow Fog',
+                'PRFG': 'Partial Fog',
+                'BCFG': 'Patches of Fog',
+                
+                //Other Phenomena
+                'FU': 'Smoke',
+                
+                'VA': 'Volcanic Ash',
+                
+                'DU': 'Widespread Dust',
+                
+                'SA': 'Sand',
+                
+                'HZ': 'Haze',
+                
+                'PY': 'Spray',
+                
+                'BLSN': 'Blowing Snow',
+                'BLSA': 'Blowing Sand',
+                'BLDU': 'Blowing Dust',
+                
+                'PO': 'Sand/Dust Whirls',
+                
+                'SQ': 'Squalls',
+                
+                'FC': 'Funnel Cloud',
+                '+FC': 'Tornado or Waterspout',
+                
+                'SS': 'Sandstorm',
+                '+SS': 'Heavy Sandstorm',
+                
+                'DS': 'Duststorm',
+                '+DS': 'Heavy Duststorm',                
+                // Adding more as needed
+            };
+
+            // Regular expression to match intensity and phenomena
+            const regex = /([+-]?)([A-Z]{2,4})/g;
+            let match;
+            let decodedList = [];
+
+            while ((match = regex.exec(codes)) !== null) {
+                const intensitySymbol = match[1];
+                const phenomenaSymbol = match[2];
+
+                const intensity = intensityMap[intensitySymbol] || '';
+                const phenomena = phenomenaMap[phenomenaSymbol] || decodeIndividualPhenomena(phenomenaSymbol);
+
+                if (intensity && phenomena) {
+                    decodedList.push(`${intensity} ${phenomena}`);
+                } else if (phenomena) {
+                    decodedList.push(`${phenomena}`);
+                } else {
+                    decodedList.push(match[0]); // Fallback to original code if unknown
+                }
+            }
+
+            return decodedList.join(', ');
+        }
+
+        // Helper function to decode individual phenomena not covered in phenomenaMap
+        function decodeIndividualPhenomena(symbol) {
+            const individualPhenomenaMap = {
+                'TS': 'Thunderstorm',
+                'RA': 'Rain',
+                'SH': 'Showers',
+                'SN': 'Snow',
+                'BR': 'Mist',
+                'CB': 'Cumulonimbus Cloud',
+                'CBMAM': 'Cumulonimbus Mammatus Cloud',
+                'CC': 'Cloud-Cloud Lightning',
+                'CCSL': 'Cirrocumulus Standing Lenticular Cloud',
+                'CIG': 'Ceiling',
+                'CLR': 'Clear',
+                'CONS': 'Continuous',
+                'COR': 'Correction',
+                'DR': 'Low Drifting',
+                'DS': 'Duststorm',
+                'DSNT': 'Distant',
+                'DU': 'Widespread Dust',
+                'DZ': 'Drizzle',
+                'E': 'East/Ended',
+                'FC': 'Funnel Cloud',
+                'FEW': 'Few Clouds',
+                'FG': 'Fog',
+                'FRQ': 'Frequent',
+                'FZ': 'Freezing',
+                'GR': 'Hail',
+                'GS': 'Small Hail/Snow Pellets',
+                'HZ': 'Haze',
+                'IC': 'Ice Crystals',
+                'LTG': 'Lightning',
+                'MI': 'Shallow',
+                'OVC': 'Overcast',
+                'PL': 'Ice Pellets',
+                'PO': 'Dust/Sand Whirls',
+                'PR': 'Partial',
+                'PY': 'Spray',
+                'RA': 'Rain',
+                'SA': 'Sand',
+                'SG': 'Snow Grains',
+                'SH': 'Showers',
+                'SKC': 'Sky Clear',
+                'SN': 'Snow',
+                'SQ': 'Squalls',
+                'SS': 'Sandstorm',
+                'DS': 'Duststorm',
+                'FZ': 'Freezing',
+                'SW': 'Snow Showers',
+                'TS': 'Thunderstorm',
+                'VA': 'Volcanic Ash',
+                'VC': 'In the Vicinity',
+                'VIS': 'Visibility',
+                'VR': 'Visual Range',
+                'VV': 'Vertical Visibility',
+                'WND': 'Wind'
+            };
+
+            return individualPhenomenaMap[symbol] || symbol;
+        }
+
+        // Corrected createClouds Function
+        function createClouds(coverageType) {
+            const cloudsContainer = document.getElementById('cloudsContainer');
+            if (!cloudsContainer) {
+                console.error("cloudsContainer not found.");
+                return;
+            }
+
+            // Remove existing clouds
+            while (cloudsContainer.firstChild) {
+                cloudsContainer.removeChild(cloudsContainer.firstChild);
+            }
+            console.log(`Creating clouds for coverage type: ${coverageType}`);
+
+            let numberOfClouds = 0;
+            let cloudSize = 0;
+
+            switch (coverageType.toUpperCase()) {
+                case 'FEW':
+                    numberOfClouds = 3;
+                    cloudSize = 482.8; // 0.3 mile in meters
+                    break;
+                case 'SCT':
+                    numberOfClouds = 3;
+                    cloudSize = 804.67; // 0.5 mile in meters
+                    break;
+                case 'BKN':
+                    numberOfClouds = 4;
+                    cloudSize = 804.67; // 0.5 mile in meters
+                    break;
+                case 'OVC':
+                    numberOfClouds = 1;
+                    cloudSize = 50000; // Large cloud covering the sky
+                    break;
+                default:
+                    console.warn(`Unknown coverageType: ${coverageType}. No clouds will be created.`);
+                    return;
+            }
+
+            console.log(`Number of clouds to create: ${numberOfClouds}, Cloud size: ${cloudSize}`);
+
+            for (let i = 0; i < numberOfClouds; i++) {
+                let position = getRandomPositionWithinRadius(1609.34); // 1 mile in meters
+
+                // For BKN (broken), make clouds overlapping
+                if (coverageType.toUpperCase() === 'BKN' && i > 0) {
+                        position.x += (Math.random() - 0.5) * 200; // Adjust within +/-100m
+                        position.z += (Math.random() - 0.5) * 200;
+                }
+
+                console.log(`Creating cloud ${i + 1} at position: x=${position.x}, y=${position.y}, z=${position.z}`);
+
+                const cloud = document.createElement('a-box');
+                cloud.setAttribute('position', `${position.x} ${position.y} ${position.z}`);
+                cloud.setAttribute('width', cloudSize);
+                cloud.setAttribute('depth', cloudSize);
+                cloud.setAttribute('height', 60.96); // 200ft = 60.96m
+                cloud.setAttribute('color', 'white');
+                cloud.setAttribute('opacity', '0.5');
+                cloud.setAttribute('transparent', 'true');
+                cloud.setAttribute('material', 'opacity: 0.5; transparent: true;');
+
+                cloudsContainer.appendChild(cloud);
+            }
+
+            console.log('Cloud creation complete.');
+        }
+
+        // Helper function to generate random positions within a given radius
+        function getRandomPositionWithinRadius(radius) {
+            const angle = Math.random() * 2 * Math.PI;
+            const distance = Math.random() * radius;
+            const x = distance * Math.cos(angle);
+            const z = distance * Math.sin(angle);
+            const y = cloudBaseHeight + 30; // Position clouds 30 meters above base
+            console.log(`Generated cloud position: x=${x}, y=${y}, z=${z}`);
+            return {x, y, z};
+        }
+
+        // Draw Elevation Data on Canvas
+        function drawElevation(elevationAngle) {
+            const ctx = elevationCtx;
+            const canvasWidth = elevationCanvas.width;
+            const canvasHeight = elevationCanvas.height;
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+            const pixelsPerDegree = canvasHeight / 90;
+
+            for (let deg = 0; deg <= 90; deg += 1) {
+                const y = canvasHeight - deg * pixelsPerDegree;
+
+                if (deg % 10 === 0) {
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(canvasWidth * 0.4, y);
+                    ctx.lineTo(canvasWidth, y);
+                    ctx.stroke();
+
+                    ctx.fillStyle = 'white';
+                    ctx.font = '14px Arial';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(deg.toString(), canvasWidth * 0.35, y + 5);
+                } else if (deg % 5 === 0) {
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(canvasWidth * 0.6, y);
+                    ctx.lineTo(canvasWidth, y);
+                    ctx.stroke();
+                }
+            }
+
+            const y = canvasHeight - elevationAngle * pixelsPerDegree;
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(canvasWidth, y);
+            ctx.stroke();
+        }
+
+        // Draw Wind Radar
+        function drawWindRadar(windDirValue, windSpeedKnots, heading) {
+            const canvas = document.getElementById('windRadarCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            ctx.clearRect(0, 0, width, height);
+
+            ctx.save();
+
+            // Move to the center
+            ctx.translate(width / 2, height / 2);
+
+            // Draw the compass circle
+            ctx.beginPath();
+            ctx.arc(0, 0, width / 2 - 5, 0, 2 * Math.PI);
+            ctx.strokeStyle = '#00FF00';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw cardinal directions (N, E, S, W)
+            drawCardinalDirections(ctx, width, height);
+
+            // Draw the wind barb if data is available
+            if (windDirValue !== null && windSpeedKnots !== null) {
+                ctx.save();
+
+                // **Corrected Rotation: Align wind direction with compass**
+            // Add 90 degrees to point towards wind direction (destination)
+                const rotationDegrees = (windDirValue + 90) % 360; // (windDirValue + 180 - 90) % 360
+                ctx.rotate(rotationDegrees * Math.PI / 180); // Convert to radians and rotate
+
+                const arrowLength = width / 2 - 15; // Length of the arrow
+
+                // Draw main wind barb with white arrowhead
+                drawWindBarb(ctx, 0, 0, arrowLength, 0, 0, true); // Set drawArrowhead to true
+
+                ctx.restore();
+
+                // Draw the opposite barb
+                ctx.save();
+                ctx.rotate((rotationDegrees + 180) * Math.PI / 180); // Rotate 180 degrees
+                drawWindBarb(ctx, 0, 0, arrowLength, 0, windSpeedKnots, false);
+                ctx.restore();
+            }
+
+            // Draw the red triangle representing user's heading
+            ctx.save();
+            ctx.rotate(heading * Math.PI / 180); // Rotate based on heading
+
+            // Draw the red triangle (heading indicator)
+            ctx.beginPath();
+            ctx.moveTo(0, -5); // Starting point at the center
+            ctx.lineTo(0, - (width / 2 - 5)); // Line upwards
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(0, - (width / 2 - 5)); // Tip of the triangle
+            ctx.lineTo(-5, - (width / 2 - 15));
+            ctx.lineTo(5, - (width / 2 - 15));
+            ctx.closePath();
+            ctx.fillStyle = 'red';
+            ctx.fill();
+
+            ctx.restore();
+
+            ctx.restore();
+        }
+
+        // Draw Cardinal Directions on Wind Radar
+        function drawCardinalDirections(ctx, width, height) {
+            ctx.fillStyle = '#00FF00';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            const radius = width / 2 - 15;
+
+            // Draw N, E, S, W
+            ctx.fillText('N', 0, -radius);
+            ctx.fillText('E', radius, 0);
+            ctx.fillText('S', 0, radius);
+            ctx.fillText('W', -radius, 0);
+        }
+
+        // Updated Draw Wind Barb Function
+        function drawWindBarb(ctx, x, y, length, angle, windSpeedKnots, drawArrowhead = true) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+
+            // Draw main shaft
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(length, 0);
+            ctx.strokeStyle = '#FFFFFF'; // Main shaft color
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            if (windSpeedKnots !== null) {
+                // Determine number of pennants, full barbs, and half barbs
+                let windSpeed = Math.round(windSpeedKnots / 5) * 5; // Round to nearest 5 knots
+                let numPennants = Math.floor(windSpeed / 50);
+                let remainder = windSpeed % 50;
+                let numFullBarbs = Math.floor(remainder / 10);
+                remainder = remainder % 10;
+                let numHalfBarbs = Math.floor(remainder / 5);
+
+                const barbSpacing = 15; // Spacing between barbs
+                const barbLength = 15;  // Length of each barb
+
+                let position = length; // Start drawing barbs from the end of the shaft
+
+                // Draw pennants (for speeds >= 50 knots)
+                for (let i = 0; i < numPennants; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(position, 0);
+                    ctx.lineTo(position + barbLength, barbLength); // Changed direction
+                    ctx.lineTo(position + barbLength, 0);           // Changed direction
+                    ctx.closePath();
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fill();
+                    position += barbSpacing; // Move position outward
+                }
+
+                // Draw full barbs (for speeds >= 10 knots)
+                for (let i = 0; i < numFullBarbs; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(position, 0);
+                    ctx.lineTo(position + barbLength, barbLength); // Changed direction
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    position += barbSpacing; // Move position outward
+                }
+
+                // Draw half barbs (for speeds >= 5 knots)
+                if (numHalfBarbs > 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(position, 0);
+                    ctx.lineTo(position + (barbLength / 2), barbLength / 2); // Changed direction
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            }
+
+            // Draw arrowhead only if specified
+            if (drawArrowhead) {
+            ctx.beginPath();
+            ctx.moveTo(length, 0);
+                ctx.lineTo(length - 10, -5); // Pointing outward
+                ctx.lineTo(length - 10, 5);  // Pointing outward
+            ctx.closePath();
+                ctx.fillStyle = '#FFFFFF'; // Arrowhead color
+            ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        // Update Cylinders in A-Frame Scene
+        function updateCylinders() {
+            const cylinder = document.getElementById('wireframeCylinder');
+            const cylinder2 = document.getElementById('wireframeCylinder2');
+
+            if (cloudBaseHeight !== null && !isNaN(cloudBaseHeight)) {
+                // Set wireframeCylinder to 1 mile radius
+                const fixedRadius = 1609.34; // 1 mile in meters
+                cylinder.setAttribute('radius', fixedRadius);
+
+                const cylinderHeight = cloudBaseHeight;
+                const cylinderPositionY = cloudBaseHeight / 2;
+
+                cylinder.setAttribute('height', cylinderHeight);
+                cylinder.setAttribute('position', `0 ${cylinderPositionY} 0`);
+
+                cylinder2.setAttribute('height', cylinderHeight);
+                cylinder2.setAttribute('position', `0 ${cylinderPositionY} 0`);
+
+                console.log(`Updated cylinders with cloud base height: ${cloudBaseHeight}`);
+            } else {
+                // Default values if cloudBaseHeight is not available
+                cloudBaseHeight = 1000; // Default in meters
+                cylinder.setAttribute('radius', 1609.34); // 1 mile in meters
+                cylinder.setAttribute('visible', 'true');
+                cylinder2.setAttribute('visible', 'false'); // Only show one cylinder
+
+                const cylinderHeight = cloudBaseHeight;
+                const cylinderPositionY = cloudBaseHeight / 2;
+
+                cylinder.setAttribute('height', cylinderHeight);
+                cylinder.setAttribute('position', `0 ${cylinderPositionY} 0`);
+
+                // **Ensure the smaller cylinder remains unaffected by unit toggling**
+                // Removed the imperial cylinder creation to prevent interference
+            }
+        }
+
+        // Calculate and Display Distance Function
+        function calculateAndDisplayDistance() {
+            if (elevationAngle > 0 && cloudBaseHeight > 0) {
+                // Calculate the slant range distance using sine function
+                const elevationRadians = elevationAngle * (Math.PI / 180);
+                const slantRange = cloudBaseHeight / Math.sin(elevationRadians);
+
+                // Calculate the horizontal distance using cosine function
+                horizontalDistance = slantRange * Math.cos(elevationRadians);
+
+                // Update HUD with the horizontal distance
+                updateDistanceDisplay();
+            } else {
+                // Reset if data is invalid
+                horizontalDistance = null;
+                cloudDistanceTextEl.textContent = `Distance to Cloud: --`;
+                if (vrCloudDistanceTextEl) {
+                    vrCloudDistanceTextEl.setAttribute('value', 'Distance to Cloud: --');
+                }
+            }
+        }
+
+        // Update Distance Display Function
+        function updateDistanceDisplay() {
+            if (cloudDistanceTextEl && horizontalDistance !== null && !isNaN(horizontalDistance)) {
+                let distanceValue, distanceUnit;
+                if (currentUnits === 'imperial') {
+                    // Convert meters to miles
+                    const horizontalDistanceMiles = horizontalDistance / 1609.34;
+                    distanceValue = horizontalDistanceMiles.toFixed(2);
+                    distanceUnit = 'miles';
+                } else {
+                    // Convert meters to kilometers
+                    const horizontalDistanceKm = horizontalDistance / 1000;
+                    distanceValue = horizontalDistanceKm.toFixed(2);
+                    distanceUnit = 'km';
+                }
+                cloudDistanceTextEl.textContent = `Distance to Cloud: ${distanceValue} ${distanceUnit}`;
+            } else {
+                cloudDistanceTextEl.textContent = `Distance to Cloud: --`;
+            }
+
+            // Update Cloud Distance in VR HUD
+            if (vrCloudDistanceTextEl) {
+                const distanceText = cloudDistanceTextEl.textContent.split(': ')[1] || '--';
+                vrCloudDistanceTextEl.setAttribute('value', `Distance to Cloud: ${distanceText}`);
+            }
+        }
+
+        // Toggle Distance Measurement Function
+        function toggleDistanceMeasurement() {
+            isMeasurementFrozen = !isMeasurementFrozen;
+            document.getElementById('measureDistanceButton').textContent = isMeasurementFrozen ? 'Resume Measurement' : 'Freeze Measurement';
+
+            if (isMeasurementFrozen) {
+                // Hide primary wireframe cylinder
+                hidePrimaryCylinder();
+
+                // Move the second wireframe cylinder using camera's forward direction
+                moveSecondCylinderToCloud();
+            } else {
+                // Show primary wireframe cylinder
+                showPrimaryCylinder();
+
+                // Reset the second wireframe cylinder position
+                resetSecondCylinderPosition();
+            }
+        }
+
+        // Hide Primary Cylinder
+        function hidePrimaryCylinder() {
+            const cylinder = document.getElementById('wireframeCylinder');
+            if (cylinder) {
+                cylinder.setAttribute('visible', 'false');
+            } else {
+                console.warn("wireframeCylinder element not found.");
+            }
+        }
+
+        // Show Primary Cylinder
+        function showPrimaryCylinder() {
+            const cylinder = document.getElementById('wireframeCylinder');
+            if (cylinder) {
+                cylinder.setAttribute('visible', 'true');
+            } else {
+                console.warn("wireframeCylinder element not found.");
+            }
+        }
+
+// Move Second Cylinder to Cloud Position using Camera's Forward Direction
+        function moveSecondCylinderToCloud() {
+            if (horizontalDistance !== null && !isNaN(horizontalDistance)) {
+        // Get the camera's world position and forward direction
+                const cameraEl = document.querySelector('a-camera');
+                const cameraWorldPos = new AFRAME.THREE.Vector3();
+                cameraEl.object3D.getWorldPosition(cameraWorldPos);
+
+        // Get the forward direction vector
+        const cameraDirection = new AFRAME.THREE.Vector3();
+        cameraEl.object3D.getWorldDirection(cameraDirection);
+
+                // **Fix: Invert the direction to correct the flipped forward direction**
+                // Multiply by -1 to correct the flip
+                cameraDirection.multiplyScalar(-1);
+
+                // Calculate the position of the cylinder along the corrected forward vector
+        const cloudPosition = new AFRAME.THREE.Vector3();
+        cloudPosition.copy(cameraWorldPos).addScaledVector(cameraDirection, horizontalDistance);
+
+                // Set the position of the second cylinder
+                const cylinder2 = document.getElementById('wireframeCylinder2');
+                if (cylinder2) {
+                    const cylinderHeight = cloudBaseHeight;
+                    const cylinderPositionY = cloudBaseHeight / 2;
+
+                    // Set a fixed radius for cylinder2 (e.g., 10 meters)
+                    const fixedRadius = 10;
+
+            cylinder2.setAttribute('position', `${cloudPosition.x} ${cylinderPositionY} ${cloudPosition.z}`);
+            cylinder2.setAttribute('height', cylinderHeight);
+                    cylinder2.setAttribute('radius', fixedRadius);
+                    cylinder2.setAttribute('color', 'white');
+                    cylinder2.setAttribute('visible', 'true');
+
+                    console.log(`Moved cylinder2 to position: x=${cloudPosition.x}, y=${cylinderPositionY}, z=${cloudPosition.z}`);
+                } else {
+                    console.warn("wireframeCylinder2 element not found.");
+                }
+            } else {
+                console.warn("Cannot move cylinder: horizontalDistance is null or invalid.");
+            }
+        }
+
+        // Reset Second Cylinder Position
+        function resetSecondCylinderPosition() {
+            const cylinder2 = document.getElementById('wireframeCylinder2');
+            if (cylinder2 && cylinder2OriginalPosition) {
+                cylinder2.setAttribute('position', cylinder2OriginalPosition);
+                cylinder2.setAttribute('visible', 'false'); // Hide when not measuring
+            } else {
+                console.warn("wireframeCylinder2 element not found or original position not set.");
+            }
+        }
+
+        // Initialize on Page Load
+        window.onload = function() {
+            initDeviceOrientation();
+            updateData();
+
+            // Get the original position of wireframeCylinder2
+            const cylinder2 = document.getElementById('wireframeCylinder2');
+            if (cylinder2) {
+                cylinder2OriginalPosition = cylinder2.getAttribute('position');
+            } else {
+                console.warn("wireframeCylinder2 element not found.");
+            }
+
+            // Start the camera
+            cameraStart();
+
+            // Set initial clouds visibility and button text
+            const cloudsContainer = document.getElementById('cloudsContainer');
+            const toggleCloudsButton = document.getElementById('toggleCloudsButton');
+            if (cloudsContainer && toggleCloudsButton) {
+            const isVisible = cloudsContainer.getAttribute('visible');
+                toggleCloudsButton.textContent = isVisible ? 'Hide Clouds' : 'Show Clouds';
+                console.log(`On page load, clouds are ${isVisible ? 'visible' : 'hidden'}. Toggle button text set to "${toggleCloudsButton.textContent}".`);
+            } else {
+                console.warn('cloudsContainer or toggleCloudsButton not found on page load.');
+            }
+
+        };
+
+        // VR Mode Events
+        sceneEl.addEventListener('enter-vr', function () {
+            isVRMode = true;
+            console.log('Entered VR mode.');
+
+            if (sceneEl.renderer && sceneEl.renderer.xr) {
+                xrSession = sceneEl.renderer.xr.getSession();
+                if (xrSession) {
+                    inputSourcesChangeListener = function (event) {
+                        handleInputSourcesChange(event);
+                    };
+                    xrSession.addEventListener('inputsourceschange', inputSourcesChangeListener);
+
+                    // Initial check of input sources
+                    handleInputSourcesChange({added: xrSession.inputSources, removed: []});
+                } else {
+                    console.warn('XRSession not available.');
+                }
+            } else {
+                console.warn('WebXR not supported.');
+            }
+
+        // Show VR HUD, Sky, and Clouds
+            if (vrHUD) {
+            vrHUD.setAttribute('visible', 'true');
+            }
+            if (vrSky) {
+            vrSky.setAttribute('visible', 'true');
+            }
+        const cloudsContainer = document.getElementById('cloudsContainer');
+        if (cloudsContainer) {
+                cloudsContainer.setAttribute('visible', 'true');
+        }
+
+            // Update toggle button text to match new visibility
+            const toggleCloudsButton = document.getElementById('toggleCloudsButton');
+            if (toggleCloudsButton) {
+                toggleCloudsButton.textContent = 'Hide Clouds';
+            }
+        });
+
+        sceneEl.addEventListener('exit-vr', function () {
+            isVRMode = false;
+            console.log('Exited VR mode.');
+
+            // Remove inputsourceschange listener
+            if (xrSession && inputSourcesChangeListener) {
+                xrSession.removeEventListener('inputsourceschange', inputSourcesChangeListener);
+                xrSession = null;
+                inputSourcesChangeListener = null;
+            }
+
+        // Hide VR HUD, Sky, and Clouds
+                if (vrHUD) {
+                vrHUD.setAttribute('visible', 'false');
+                }
+                if (vrSky) {
+                vrSky.setAttribute('visible', 'false');
+                }
+
+            // Hide Clouds
+                const cloudsContainer = document.getElementById('cloudsContainer');
+                if (cloudsContainer) {
+                cloudsContainer.setAttribute('visible', 'false');
+                }
+
+            // Update the toggle button text
+                const toggleCloudsButton = document.getElementById('toggleCloudsButton');
+                if (toggleCloudsButton) {
+                    toggleCloudsButton.textContent = 'Show Clouds';
+            }
+        });
+
+        // Define the input sources change handler
+        function handleInputSourcesChange(event) {
+            let inputSources = xrSession.inputSources;
+            let hasHandOrController = inputSources.some(inputSource => {
+                return inputSource.hand || inputSource.targetRayMode === 'tracked-pointer';
+            });
+
+            console.log('Input sources changed. hasHandOrController:', hasHandOrController);
+
+            const cloudsContainer = document.getElementById('cloudsContainer');
+            if (cloudsContainer) {
+                cloudsContainer.setAttribute('visible', hasHandOrController);
+            }
+
+            // Update the toggle button text
+            const toggleCloudsButton = document.getElementById('toggleCloudsButton');
+            if (toggleCloudsButton) {
+                toggleCloudsButton.textContent = hasHandOrController ? 'Hide Clouds' : 'Show Clouds';
+            }
+        }
+
+        // Key press to toggle VR HUD and Blue Sky (e.g., 'H' key)
+        document.addEventListener('keydown', function(event) {
+            if (event.key.toLowerCase() === 'h') {
+                if (vrHUD && vrSky) {
+                // Correctly get the boolean value of 'visible'
+                const isVisible = vrHUD.getAttribute('visible');
+
+                // Toggle visibility
+                const newVisibility = !isVisible;
+                vrHUD.setAttribute('visible', newVisibility);
+                vrSky.setAttribute('visible', newVisibility);
+
+                    // Toggle Clouds based on VR HUD visibility
+                    const cloudsContainer = document.getElementById('cloudsContainer');
+                    if (cloudsContainer) {
+                    cloudsContainer.setAttribute('visible', newVisibility);
+                    }
+
+                    // Update the toggle button text accordingly
+                    const toggleCloudsButton = document.getElementById('toggleCloudsButton');
+                    if (toggleCloudsButton) {
+                    toggleCloudsButton.textContent = newVisibility ? 'Hide Clouds' : 'Show Clouds';
+                    }
+
+                console.log(`VR HUD, Blue Sky, and Clouds toggled to ${newVisibility ? 'visible' : 'hidden'}.`);
+            }
+            }
+        });
+    </script>
+</body>
+</html>
