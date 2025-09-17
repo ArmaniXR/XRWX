@@ -844,6 +844,26 @@ Armani Cassel, NWS Shreveport, 11/2024
             throw error;
         }
         }
+            
+        // Prefer receiptTime (ISO), then reportTime (ISO), then legacy obsTime (epoch)
+            function getObservationDate(data) {
+                if (data && data.receiptTime) {
+                    const d = new Date(data.receiptTime);      // already ISO with Z
+                    if (!isNaN(d)) return d;
+                }
+                if (data && data.reportTime) {
+                    const d = new Date(data.reportTime);       // already ISO with Z
+                    if (!isNaN(d)) return d;
+                }
+                if (data && data.obsTime != null) {          // legacy epoch seconds or ms
+                    const n = Number(data.obsTime);
+                    const ms = n > 1e12 ? n : n * 1000;        // detect seconds vs ms
+                    const d = new Date(ms);
+                    if (!isNaN(d)) return d;
+                }
+                return null;
+            }
+
 
     // Modified displayWeatherData Function
         function displayWeatherData(data) {
@@ -923,36 +943,30 @@ Armani Cassel, NWS Shreveport, 11/2024
             vrWeatherTextEl.setAttribute('value', `Weather: ${weatherText}`);
             }
 
-            // Extract and Format Observation Time
-            let observationTime = data.reportTime;
-            if (observationTime) {
-                // Parse the date string as a UTC date
-                let date = new Date(observationTime + 'Z'); // Append 'Z' to indicate UTC time
-
-                // Format options
-                let options = {
-                    hour: 'numeric',
-                    minute: 'numeric',
-                    second: 'numeric',
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric',
-                    timeZoneName: 'short',
-                };
-
-                // Format the date in the local time zone
-                let formattedTime = date.toLocaleString(undefined, options);
-
-                timestampTextEl.textContent = `Observation Time: ${formattedTime}`;
-                if (vrTimestampTextEl) {
+            // Extract and Format Observation Time (prefer receiptTime)
+            const date = getObservationDate(data);
+            if (date) {
+            const options = {
+                hour: 'numeric',
+                minute: 'numeric',
+                second: 'numeric',
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                timeZoneName: 'short',
+            };
+            const formattedTime = date.toLocaleString(undefined, options);
+            timestampTextEl.textContent = `Observation Time: ${formattedTime}`;
+            if (vrTimestampTextEl) {
                 vrTimestampTextEl.setAttribute('value', `Observation Time: ${formattedTime}`);
-                }
-            } else {
-                timestampTextEl.textContent = 'Observation Time: N/A';
-                if (vrTimestampTextEl) {
-                vrTimestampTextEl.setAttribute('value', 'Observation Time: N/A');
-                }
             }
+            } else {
+            timestampTextEl.textContent = 'Observation Time: N/A';
+            if (vrTimestampTextEl) {
+                vrTimestampTextEl.setAttribute('value', 'Observation Time: N/A');
+            }
+            }
+
 
             // Extract and Display Cloud Cover
             let cloudInfo = '';
